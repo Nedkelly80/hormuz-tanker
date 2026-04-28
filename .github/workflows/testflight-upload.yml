@@ -6,6 +6,8 @@ on:
 jobs:
   upload:
     runs-on: macos-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
