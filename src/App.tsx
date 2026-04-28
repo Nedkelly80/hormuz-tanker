@@ -155,6 +155,7 @@ export default function App() {
   const [tankerYOffset, setTankerYOffset] = useState(0);
   const [cargoType, setCargoType] = useState<CargoType>("crude");
   const [graphicsMode, setGraphicsMode] = useState<"standard" | "enhanced">("enhanced");
+  const [showMenuExitConfirm, setShowMenuExitConfirm] = useState(false);
 
   // ── Fuel & Shield ────────────────────────────────────────────────────
   const INITIAL_FUEL = 100;
@@ -281,7 +282,9 @@ export default function App() {
         await sound.play();
         sound.pause();
         sound.currentTime = 0;
-      } catch {}
+      } catch (error) {
+        console.debug("Audio warmup failed", error);
+      }
       sound.muted = false;
     }));
 
@@ -1366,11 +1369,7 @@ export default function App() {
             <>
               <div className="w-px h-6 bg-white/10 shrink-0" />
               <button
-                onClick={() => {
-                  if (window.confirm("Return to main menu? Your current run will end.")) {
-                    setStatus("start");
-                  }
-                }}
+                onClick={() => setShowMenuExitConfirm(true)}
                 className="pointer-events-auto px-2 py-1 rounded-lg bg-white/10 border border-white/15 active:scale-95 flex items-center gap-1 shrink-0"
               >
                 <Menu className="w-3 h-3 text-white" />
@@ -1833,6 +1832,42 @@ export default function App() {
 
       {/* ── IAP Modal ─────────────────────────────────────────────────── */}
       <AnimatePresence>
+        {showMenuExitConfirm && status === "playing" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-[180] bg-black/70 backdrop-blur-md flex items-center justify-center p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 12 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 12 }}
+              className="ios-card w-full max-w-xs p-6 text-center"
+            >
+              <h3 className="text-lg font-black text-white mb-2">Return to Menu?</h3>
+              <p className="text-xs text-white/60 mb-5">Your current run will end.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowMenuExitConfirm(false)}
+                  className="flex-1 py-2 rounded-lg border border-white/15 text-xs font-bold text-white/80 bg-white/5 active:scale-95"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowMenuExitConfirm(false);
+                    setStatus("start");
+                  }}
+                  className="flex-1 py-2 rounded-lg bg-ios-blue text-xs font-black text-white active:scale-95"
+                >
+                  Exit
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         {showIAP && (
           <motion.div
             initial={{ opacity: 0 }}
