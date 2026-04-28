@@ -1,4 +1,4 @@
-# Hormuz Tanker
+# Hormuz Pass
 
 ## Upload to TestFlight
 
