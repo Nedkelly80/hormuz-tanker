@@ -42,7 +42,7 @@ jobs:
 
       - name: Upload to TestFlight
         env:
-          APP_IDENTIFIER: com.hormuzpass.app
+          APP_IDENTIFIER: ${{ secrets.APP_IDENTIFIER || 'com.hormuzpass.app' }}
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}

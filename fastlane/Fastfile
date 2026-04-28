@@ -1,5 +1,7 @@
 def decode_base64_to_file(value, path)
-  File.open(path, 'wb') { |f| f.write(Base64.decode64(value)) }
+  File.open(path, File::WRONLY | File::CREAT | File::TRUNC, 0o600) do |f|
+    f.write(Base64.decode64(value))
+  end
 end
 
 platform :ios do
@@ -22,6 +24,8 @@ platform :ios do
     )
 
     Dir.mktmpdir('fastlane-signing') do |dir|
+      File.chmod(0o700, dir)
+
       cert_path = File.join(dir, 'signing.p12')
       decode_base64_to_file(signing_cert_base64, cert_path)
       import_certificate(
