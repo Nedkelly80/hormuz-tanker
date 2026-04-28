@@ -1,0 +1,234 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --radius-ios: 12px;
+  --color-ios-blue: #007AFF;
+  --color-ios-red: #FF3B30;
+  --color-ios-green: #34C759;
+}
+
+:root {
+  background-color: #000;
+  color: #fff;
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  font-family: var(--font-sans);
+  height: 100dvh;
+}
+
+.ios-glass {
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.ios-card {
+  border-radius: 20px;
+  background: rgba(18,18,20,0.85);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.ios-btn {
+  padding: 12px 24px;
+  border-radius: 12px;
+  background: var(--color-ios-blue);
+  color: white;
+  font-weight: 600;
+  transition: opacity 0.15s;
+}
+.ios-btn:active { opacity: 0.7; }
+
+@keyframes waterScroll {
+  from { background-position: 0 0, 0 0, 0 0; }
+  to   { background-position: 0 600px, 0 300px, 0 150px; }
+}
+@keyframes waterShimmer {
+  0%   { transform: scaleX(1)   skewY(0deg); opacity: 0.03; }
+  50%  { transform: scaleX(1.04) skewY(0.5deg); opacity: 0.07; }
+  100% { transform: scaleX(1)   skewY(0deg); opacity: 0.03; }
+}
+@keyframes causticPulse {
+  0%   { transform: translate(-4%,-4%) scale(1)    rotate(0deg);   opacity: 0.07; }
+  33%  { transform: translate(3%,2%)   scale(1.06) rotate(3deg);   opacity: 0.14; }
+  66%  { transform: translate(-2%,5%)  scale(0.97) rotate(-2deg);  opacity: 0.09; }
+  100% { transform: translate(-4%,-4%) scale(1)    rotate(0deg);   opacity: 0.07; }
+}
+@keyframes deepGlow {
+  0%,100% { opacity: 0.04; }
+  50%      { opacity: 0.10; }
+}
+
+.water-pattern {
+  background-color: #000814;
+  background-image:
+    radial-gradient(ellipse 120% 40% at 50% 20%, rgba(0,60,140,0.35) 0%, transparent 70%),
+    radial-gradient(ellipse 80% 60% at 20% 60%,  rgba(0,40,100,0.25) 0%, transparent 70%),
+    radial-gradient(ellipse 80% 60% at 80% 80%,  rgba(0,50,120,0.20) 0%, transparent 70%);
+  animation: waterScroll 18s ease-in-out infinite alternate;
+  will-change: background-position;
+}
+
+.water-shimmer {
+  background: linear-gradient(to bottom,
+    transparent 0%,
+    rgba(30,120,200,0.06) 30%,
+    rgba(60,160,240,0.10) 50%,
+    rgba(30,120,200,0.06) 70%,
+    transparent 100%);
+  animation: waterShimmer 6s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.caustics-layer {
+  background: radial-gradient(ellipse 60% 40% at 30% 40%, rgba(0,100,255,0.18) 0%, transparent 70%),
+              radial-gradient(ellipse 50% 60% at 70% 60%, rgba(0,60,180,0.12) 0%, transparent 70%),
+              radial-gradient(ellipse 80% 30% at 50% 80%, rgba(0,140,255,0.08) 0%, transparent 70%);
+  animation: causticPulse 12s ease-in-out infinite;
+  mix-blend-mode: screen;
+  will-change: transform, opacity;
+}
+
+.deep-glow {
+  background: radial-gradient(ellipse 80% 40% at 50% 80%, rgba(0,60,180,0.18) 0%, transparent 70%);
+  animation: deepGlow 8s ease-in-out infinite;
+}
+
+@keyframes rain {
+  from { transform: translateY(-120px) scaleY(1); }
+  to   { transform: translateY(110vh)  scaleY(1.1); }
+}
+@keyframes fogDrift {
+  0%   { transform: translateX(-6%) translateY(0px);   opacity: 0.18; }
+  40%  { transform: translateX(4%)  translateY(12px);  opacity: 0.32; }
+  70%  { transform: translateX(-3%) translateY(-8px);  opacity: 0.22; }
+  100% { transform: translateX(-6%) translateY(0px);   opacity: 0.18; }
+}
+.rain-streak {
+  position: absolute;
+  background: linear-gradient(to bottom, transparent, rgba(180,220,255,0.55) 40%, rgba(180,220,255,0.3) 100%);
+  width: 1.5px;
+  height: 55px;
+  top: -120px;
+  pointer-events: none;
+  z-index: 60;
+  animation: rain 0.55s linear infinite;
+  will-change: transform;
+  border-radius: 1px;
+}
+.fog-layer {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 60% at 50% 40%, rgba(200,220,255,0.12) 0%, transparent 75%);
+  filter: blur(18px);
+  pointer-events: none;
+  z-index: 55;
+  animation: fogDrift 18s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+.strait-fog {
+  background: linear-gradient(to bottom, rgba(0,8,20,0.95) 0%, rgba(0,8,20,0.7) 25%, transparent 65%);
+  transition: opacity 7s ease-in-out;
+}
+
+@keyframes steamRise {
+  0%   { transform: translateY(0)    scale(0.6); opacity: 0; }
+  15%  { opacity: 0.45; }
+  100% { transform: translateY(-55px) scale(2.4); opacity: 0; }
+}
+@keyframes deckLightFlicker {
+  0%,100% { opacity: 0.85; filter: drop-shadow(0 0 3px #fde047); }
+  45%      { opacity: 1;    filter: drop-shadow(0 0 6px #fde047); }
+  50%      { opacity: 0.6;  filter: drop-shadow(0 0 2px #fde047); }
+  55%      { opacity: 1;    filter: drop-shadow(0 0 6px #fde047); }
+}
+@keyframes radarSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.steam-particle { animation: steamRise 3.2s ease-out infinite; }
+.deck-light     { animation: deckLightFlicker 2.2s ease-in-out infinite; }
+.radar-arm      { animation: radarSpin 2s linear infinite; transform-box: fill-box; transform-origin: center; }
+.tanker-glow    { filter: drop-shadow(0 0 18px rgba(0,100,200,0.18)); }
+.bloom-container { filter: drop-shadow(0 0 8px rgba(0,122,255,0.22)); }
+
+@keyframes smokeDrift {
+  0%   { transform: translateY(0)    scale(1);   opacity: 0.75; filter: blur(2px); }
+  100% { transform: translateY(-38px) scale(3.2); opacity: 0;   filter: blur(6px); }
+}
+@keyframes fireDance {
+  0%   { transform: scale(1)    translateY(0)   rotate(-1deg); opacity: 0.85; filter: drop-shadow(0 0 8px #ff6500); }
+  50%  { transform: scale(1.12) translateY(-3px) rotate(2deg); opacity: 1;    filter: drop-shadow(0 0 14px #ff9500); }
+  100% { transform: scale(1)    translateY(0)   rotate(-1deg); opacity: 0.9;  filter: drop-shadow(0 0 10px #ff6500); }
+}
+
+.smoke-fx {
+  background: radial-gradient(circle, rgba(60,60,60,0.9) 0%, rgba(20,20,20,0.6) 50%, transparent 80%);
+  animation: smokeDrift 1.6s ease-out infinite;
+}
+.fire-fx {
+  background: radial-gradient(circle, #ffdd00 0%, #ff6500 40%, rgba(200,0,0,0.5) 70%, transparent 90%);
+  animation: fireDance 0.35s ease-in-out infinite alternate;
+}
+
+@keyframes mineBob {
+  0%,100% { transform: translateY(0px)   rotate(0deg); }
+  30%     { transform: translateY(-4px)  rotate(2deg); }
+  70%     { transform: translateY(3px)   rotate(-2deg); }
+}
+.mine-bob { animation: mineBob 3.5s ease-in-out infinite; }
+
+.ios-hud-bg {
+  background: rgba(0,0,0,0.28);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+}
+
+.custom-scrollbar::-webkit-scrollbar       { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.04); }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 4px; }
+
+@keyframes causticDrift1 {
+  0%   { transform: translate(-4%,-4%) rotate(0deg)  scale(1); }
+  33%  { transform: translate(3%, 2%)  rotate(3deg)  scale(1.05); }
+  66%  { transform: translate(-2%, 5%) rotate(-2deg) scale(0.97); }
+  100% { transform: translate(-4%,-4%) rotate(0deg)  scale(1); }
+}
+@keyframes causticDrift2 {
+  0%   { transform: translate(3%,2%)   rotate(0deg)  scale(1); }
+  50%  { transform: translate(-4%,-3%) rotate(-4deg) scale(1.08); }
+  100% { transform: translate(3%,2%)   rotate(0deg)  scale(1); }
+}
+.caustics-layer   { animation: causticDrift1 14s ease-in-out infinite; }
+.caustics-layer-2 { animation: causticDrift2 20s ease-in-out infinite; }
+
+@keyframes flash {
+  0%   { opacity: 0; }
+  20%  { opacity: 0.85; }
+  35%  { opacity: 0.2; }
+  55%  { opacity: 0.7; }
+  100% { opacity: 0; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 0.9; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
