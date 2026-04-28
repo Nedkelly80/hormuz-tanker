@@ -242,6 +242,8 @@ export default function App() {
   const targetXRef = useRef<number>(0);
   const currentXRef = useRef<number>(0);
   const noiseSeedRef = useRef<number>(Math.random() * 1000);
+  const terrainRef = useRef<TerrainSlice[]>([]);
+  const missionToastTimeoutRef = useRef<number | null>(null);
 
   const containerWidth = containerRef.current?.clientWidth || 400;
   const containerHeight = containerRef.current?.clientHeight || 600;
@@ -291,6 +293,10 @@ export default function App() {
       fetchLeaderboard();
     }
   }, [showLeaderboard]);
+
+  useEffect(() => {
+    terrainRef.current = terrain;
+  }, [terrain]);
 
   const submitScore = async () => {
     if (!user) return;
@@ -419,11 +425,25 @@ export default function App() {
       setCash(c => c + 300);
       setShowMissionToast(true);
       setCurrentMissionIndex(prev => Math.min(prev + 1, MISSIONS.length - 1));
-      setTimeout(() => setShowMissionToast(false), 4000);
+      if (missionToastTimeoutRef.current !== null) {
+        window.clearTimeout(missionToastTimeoutRef.current);
+      }
+      missionToastTimeoutRef.current = window.setTimeout(() => {
+        setShowMissionToast(false);
+        missionToastTimeoutRef.current = null;
+      }, 4000);
     } else if (failed) {
       setStatus("gameOver");
     }
   }, [score, cash, tollsCompleted, currentMissionIndex, status, missionStartMetric, missionTimer]);
+
+  useEffect(() => {
+    return () => {
+      if (missionToastTimeoutRef.current !== null) {
+        window.clearTimeout(missionToastTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Save bank on game over
   useEffect(() => {
@@ -711,7 +731,7 @@ export default function App() {
       const lerpFactor = baseHandling * healthFactor;
       
       // Find land width at the tanker's vertical position
-      const relevantSlice = terrain.find(s => s.y > tankerY - 20 && s.y < tankerY + 180);
+      const relevantSlice = terrainRef.current.find(s => s.y > tankerY - 20 && s.y < tankerY + 180);
       const lBound = relevantSlice?.leftWidth || 50;
       const rBound = (containerWidth - (relevantSlice?.rightWidth || 50)) - TANKER_WIDTH;
       
@@ -911,7 +931,7 @@ export default function App() {
     gameLoopRef.current = requestAnimationFrame(gameLoop);
 
     return () => cancelAnimationFrame(gameLoopRef.current);
-  }, [status, spawnObject, terrain]);
+  }, [status, spawnObject]);
 
   return (
     <div 
