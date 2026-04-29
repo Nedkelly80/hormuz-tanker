@@ -219,12 +219,7 @@ jobs:
             <key>teamID</key>
             <string>${{ inputs.team_id }}</string>
             <key>signingStyle</key>
-            <string>manual</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>${{ inputs.bundle_id }}</key>
-              <string>hormuzpass-appstore-ci</string>
-            </dict>
+            <string>automatic</string>
             <key>uploadBitcode</key>
             <false/>
             <key>uploadSymbols</key>
