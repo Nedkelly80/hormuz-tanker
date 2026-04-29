@@ -19,6 +19,7 @@ import {
   Wind,
   Cloud,
   Trophy,
+  Menu,
   LogOut,
   LogIn,
   X,
@@ -153,6 +154,8 @@ export default function App() {
   const [missionStartMetric, setMissionStartMetric] = useState<number>(0);
   const [tankerYOffset, setTankerYOffset] = useState(0);
   const [cargoType, setCargoType] = useState<CargoType>("crude");
+  const [graphicsMode, setGraphicsMode] = useState<"standard" | "enhanced">("enhanced");
+  const [showMenuExitConfirm, setShowMenuExitConfirm] = useState(false);
 
   // ── Fuel & Shield ────────────────────────────────────────────────────
   const INITIAL_FUEL = 100;
@@ -257,6 +260,36 @@ export default function App() {
   const ambientOceanSound = useRef<HTMLAudioElement | null>(null);
   const engineSound = useRef<HTMLAudioElement | null>(null);
   const explosionSound = useRef<HTMLAudioElement | null>(null);
+  const audioUnlockedRef = useRef(false);
+
+  const unlockAudio = useCallback(async () => {
+    if (audioUnlockedRef.current) return;
+    const sounds = [
+      seagullSound.current,
+      foghornSound.current,
+      rainSound.current,
+      ambientOceanSound.current,
+      engineSound.current,
+      explosionSound.current,
+    ].filter((s): s is HTMLAudioElement => s !== null);
+
+    if (sounds.length === 0) return;
+
+    await Promise.all(sounds.map(async (sound) => {
+      try {
+        sound.muted = true;
+        sound.currentTime = 0;
+        await sound.play();
+        sound.pause();
+        sound.currentTime = 0;
+      } catch (error) {
+        console.debug("Audio warmup failed", error);
+      }
+      sound.muted = false;
+    }));
+
+    audioUnlockedRef.current = true;
+  }, []);
 
   useEffect(() => {
     if (explosions.length > 0) {
@@ -343,34 +376,27 @@ export default function App() {
   }, [status]);
 
   useEffect(() => {
-    seagullSound.current = new Audio("https://www.soundjay.com/nature/sounds/seagull-1.mp3");
-    if (seagullSound.current) seagullSound.current.volume = 0.15;
+    const makeSound = (url: string, volume: number, loop = false) => {
+      const sound = new Audio(url);
+      sound.volume = volume;
+      sound.loop = loop;
+      sound.preload = "auto";
+      sound.crossOrigin = "anonymous";
+      sound.setAttribute("playsinline", "true");
+      return sound;
+    };
+
+    seagullSound.current = makeSound("https://www.soundjay.com/nature/sounds/seagull-1.mp3", 0.15);
     
-    foghornSound.current = new Audio("https://www.soundjay.com/transportation/sounds/ship-horn-1.mp3");
-    if (foghornSound.current) foghornSound.current.volume = 0.1;
+    foghornSound.current = makeSound("https://www.soundjay.com/transportation/sounds/ship-horn-1.mp3", 0.1);
     
-    rainSound.current = new Audio("https://www.soundjay.com/nature/sounds/rain-07.mp3");
-    if (rainSound.current) {
-      rainSound.current.loop = true;
-      rainSound.current.volume = 0.2;
-    }
+    rainSound.current = makeSound("https://www.soundjay.com/nature/sounds/rain-07.mp3", 0.2, true);
 
-    ambientOceanSound.current = new Audio("https://www.soundjay.com/nature/sounds/ocean-wave-1.mp3");
-    if (ambientOceanSound.current) {
-      ambientOceanSound.current.loop = true;
-      ambientOceanSound.current.volume = 0.15;
-    }
+    ambientOceanSound.current = makeSound("https://www.soundjay.com/nature/sounds/ocean-wave-1.mp3", 0.15, true);
 
-    engineSound.current = new Audio("https://www.soundjay.com/transportation/sounds/boat-engine-1.mp3");
-    if (engineSound.current) {
-      engineSound.current.loop = true;
-      engineSound.current.volume = 0.1;
-    }
+    engineSound.current = makeSound("https://www.soundjay.com/transportation/sounds/boat-engine-1.mp3", 0.1, true);
 
-    explosionSound.current = new Audio("https://www.soundjay.com/mechanical/sounds/explosion-01.mp3");
-    if (explosionSound.current) {
-      explosionSound.current.volume = 0.4;
-    }
+    explosionSound.current = makeSound("https://www.soundjay.com/mechanical/sounds/explosion-01.mp3", 0.4);
 
     return () => {
       [seagullSound, foghornSound, rainSound, ambientOceanSound, engineSound, explosionSound].forEach(s => {
@@ -382,6 +408,20 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const unlockFromGesture = () => {
+      void unlockAudio();
+    };
+
+    window.addEventListener("pointerdown", unlockFromGesture, { once: true });
+    window.addEventListener("touchstart", unlockFromGesture, { once: true });
+
+    return () => {
+      window.removeEventListener("pointerdown", unlockFromGesture);
+      window.removeEventListener("touchstart", unlockFromGesture);
+    };
+  }, [unlockAudio]);
+
   const playSound = (type: "seagull" | "foghorn" | "explosion") => {
     let s: HTMLAudioElement | null = null;
     if (type === "seagull") s = seagullSound.current;
@@ -390,6 +430,9 @@ export default function App() {
     
     if (s) {
       s.currentTime = 0;
+      if (!audioUnlockedRef.current) {
+        void unlockAudio();
+      }
       s.play().catch(() => {});
     }
   };
@@ -518,6 +561,9 @@ export default function App() {
       if (engineSound.current) engineSound.current.pause();
       return;
     } else {
+      if (!audioUnlockedRef.current) {
+        void unlockAudio();
+      }
       if (ambientOceanSound.current) ambientOceanSound.current.play().catch(() => {});
       if (engineSound.current) engineSound.current.play().catch(() => {});
     }
@@ -539,7 +585,7 @@ export default function App() {
     }, 15000);
 
     return () => clearInterval(interval);
-  }, [status]);
+  }, [status, unlockAudio]);
 
   useEffect(() => {
     if (weather === "fog") {
@@ -626,6 +672,9 @@ export default function App() {
   };
 
   const startGame = () => {
+    if (!audioUnlockedRef.current) {
+      void unlockAudio();
+    }
     setScore(0);
     setCash(initialCash);
     setHealth(maxHealth);
@@ -949,12 +998,24 @@ export default function App() {
       onTouchStart={handleMouseMove}
     >
       {/* Ocean — animated CSS ripple layers */}
-      <div className="absolute inset-0 water-pattern opacity-80 pointer-events-none" />
+      <div
+        className="absolute inset-0 water-pattern pointer-events-none"
+        style={{ opacity: graphicsMode === "enhanced" ? 0.9 : 0.75 }}
+      />
       {/* Shimmer sweep across water surface */}
-      <div className="absolute inset-0 water-shimmer pointer-events-none z-0" />
+      <div
+        className="absolute inset-0 water-shimmer pointer-events-none z-0"
+        style={{ opacity: graphicsMode === "enhanced" ? 1 : 0.7 }}
+      />
       {/* Bioluminescent deep glow */}
       <div className="absolute inset-0 deep-glow pointer-events-none z-0 transition-opacity duration-[5000ms]"
            style={{ opacity: weather === "fog" ? 0.3 : 1 }} />
+      {graphicsMode === "enhanced" && (
+        <>
+          <div className="absolute inset-0 cinematic-noise pointer-events-none z-[1]" />
+          <div className="absolute inset-0 cinematic-vignette pointer-events-none z-[2]" />
+        </>
+      )}
 
       {/* Caustics — SVG blob layer 1 */}
       <svg className="absolute inset-[-12%] caustics-layer pointer-events-none z-0" style={{ opacity: weather === "fog" ? 0.04 : 1, width: "124%", height: "124%" }} viewBox="0 0 400 800" preserveAspectRatio="xMidYMid slice">
@@ -1303,6 +1364,19 @@ export default function App() {
             </div>
             <span className="text-[7px] text-white/30 uppercase tracking-wide">Distance</span>
           </div>
+
+          {status === "playing" && (
+            <>
+              <div className="w-px h-6 bg-white/10 shrink-0" />
+              <button
+                onClick={() => setShowMenuExitConfirm(true)}
+                className="pointer-events-auto px-2 py-1 rounded-lg bg-white/10 border border-white/15 active:scale-95 flex items-center gap-1 shrink-0"
+              >
+                <Menu className="w-3 h-3 text-white" />
+                <span className="text-[8px] font-bold text-white">Menu</span>
+              </button>
+            </>
+          )}
         </div>
 
         {/* Boost badge — separate small pill below */}
@@ -1758,6 +1832,42 @@ export default function App() {
 
       {/* ── IAP Modal ─────────────────────────────────────────────────── */}
       <AnimatePresence>
+        {showMenuExitConfirm && status === "playing" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-[180] bg-black/70 backdrop-blur-md flex items-center justify-center p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 12 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 12 }}
+              className="ios-card w-full max-w-xs p-6 text-center"
+            >
+              <h3 className="text-lg font-black text-white mb-2">Return to Menu?</h3>
+              <p className="text-xs text-white/60 mb-5">Your current run will end.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowMenuExitConfirm(false)}
+                  className="flex-1 py-2 rounded-lg border border-white/15 text-xs font-bold text-white/80 bg-white/5 active:scale-95"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowMenuExitConfirm(false);
+                    setStatus("start");
+                  }}
+                  className="flex-1 py-2 rounded-lg bg-ios-blue text-xs font-black text-white active:scale-95"
+                >
+                  Exit
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         {showIAP && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -1882,6 +1992,21 @@ export default function App() {
                     <span className="text-[10px] font-bold uppercase whitespace-nowrap">{CARGO_STATS[type].name}</span>
                   </button>
                 ))}
+              </div>
+
+              <div className="flex items-center gap-2 mb-6">
+                <button
+                  onClick={() => setGraphicsMode("enhanced")}
+                  className={`flex-1 py-2 rounded-xl border text-[11px] font-bold transition-all ${graphicsMode === "enhanced" ? "border-cyan-400 bg-cyan-500/20 text-cyan-200" : "border-white/10 bg-black/30 text-white/50"}`}
+                >
+                  Enhanced Graphics
+                </button>
+                <button
+                  onClick={() => setGraphicsMode("standard")}
+                  className={`flex-1 py-2 rounded-xl border text-[11px] font-bold transition-all ${graphicsMode === "standard" ? "border-white/30 bg-white/15 text-white" : "border-white/10 bg-black/30 text-white/50"}`}
+                >
+                  Standard Graphics
+                </button>
               </div>
 
               <div className="flex flex-col gap-2">
