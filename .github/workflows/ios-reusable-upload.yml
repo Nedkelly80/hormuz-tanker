@@ -140,7 +140,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BUILD_NUMBER="$(date -u +%Y%m%d)${GITHUB_RUN_NUMBER}${GITHUB_RUN_ATTEMPT}"
+          BUILD_NUMBER="$(date -u +%Y%m%d)$(printf '%06d' "${GITHUB_RUN_NUMBER}")$(printf '%02d' "${GITHUB_RUN_ATTEMPT}")"
           sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*/CURRENT_PROJECT_VERSION = ${BUILD_NUMBER}/g" ios/App/App.xcodeproj/project.pbxproj
           echo "BUILD_NUMBER=${BUILD_NUMBER}" >> "$GITHUB_ENV"
 
@@ -231,12 +231,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          xcrun altool --upload-app \
-            --type ios \
-            --file "${IPA_PATH}" \
-            --apiKey "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
-            --apiIssuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
-            --verbose \
+          xcrun iTMSTransporter \
+            -m upload \
+            -assetFile "${IPA_PATH}" \
+            -apiKey "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
+            -apiIssuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
+            -v informational \
             | tee "$RUNNER_TEMP/appstore-upload.log"
 
       - name: Upload IPA and logs as artifacts

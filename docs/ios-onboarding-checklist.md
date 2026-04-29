@@ -4,7 +4,7 @@ Use this checklist to enable shared App Store Connect/TestFlight uploads quickly
 
 ## 1) Reusable workflow source
 - [ ] Keep reusable workflow in `Nedkelly80/hormuz-tanker` at `.github/workflows/ios-reusable-upload.yml`
-- [ ] In Crew Chief AI, reference it with `uses: Nedkelly80/hormuz-tanker/.github/workflows/ios-reusable-upload.yml@main`
+- [ ] In Crew Chief AI, reference it with `uses: Nedkelly80/hormuz-tanker/.github/workflows/ios-reusable-upload.yml@<tag-or-commit-sha>` (avoid floating `@main` in production)
 
 ## 2) Standard required inputs
 - [ ] `app_scheme`
@@ -34,7 +34,7 @@ Use this checklist to enable shared App Store Connect/TestFlight uploads quickly
 - [ ] Configure Slack webhook secret for failure notifications (`SLACK_WEBHOOK_URL`)
 - [ ] Configure SMTP secrets for optional email failure notifications
 - [ ] Keep IPA/log artifact retention set (default 14 days)
-- [ ] Keep shared build-number strategy (`UTC YYYYMMDD + GITHUB_RUN_NUMBER + GITHUB_RUN_ATTEMPT`)
+- [ ] Keep shared build-number strategy (`UTC YYYYMMDD + zero-padded GITHUB_RUN_NUMBER (6) + zero-padded GITHUB_RUN_ATTEMPT (2)`)
 
 ## 7) Rollout steps
 - [ ] Pilot validated in Hormuz Tanker with successful TestFlight upload
