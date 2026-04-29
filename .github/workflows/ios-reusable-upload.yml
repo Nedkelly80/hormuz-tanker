@@ -226,7 +226,7 @@ jobs:
             <key>teamID</key>
             <string>${{ inputs.team_id }}</string>
             <key>signingStyle</key>
-            <string>automatic</string>
+            <string>manual</string>
             <key>uploadBitcode</key>
             <false/>
             <key>uploadSymbols</key>
