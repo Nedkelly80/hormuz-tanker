@@ -34,7 +34,7 @@ Use this checklist to enable shared App Store Connect/TestFlight uploads quickly
 - [ ] Configure Slack webhook secret for failure notifications (`SLACK_WEBHOOK_URL`)
 - [ ] Configure SMTP secrets for optional email failure notifications
 - [ ] Keep IPA/log artifact retention set (default 14 days)
-- [ ] Keep shared build-number strategy (`UTC YYYYMMDD + zero-padded GITHUB_RUN_NUMBER (6) + zero-padded GITHUB_RUN_ATTEMPT (2)`)
+- [ ] Keep shared build-number strategy (`UTC date in YYYYMMDD format + zero-padded GITHUB_RUN_NUMBER (6) + zero-padded GITHUB_RUN_ATTEMPT (2)`)
 
 ## 7) Rollout steps
 - [ ] Pilot validated in Hormuz Tanker with successful TestFlight upload
