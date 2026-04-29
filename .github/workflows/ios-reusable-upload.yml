@@ -50,6 +50,26 @@ on:
         required: false
         default: 14
         type: number
+      has_signing_cert:
+        description: Whether SIGNING_CERT_BASE64 and SIGNING_CERT_PASSWORD secrets are set
+        required: false
+        default: false
+        type: boolean
+      has_provisioning_profile:
+        description: Whether PROVISIONING_PROFILE_BASE64 secret is set
+        required: false
+        default: false
+        type: boolean
+      has_slack_webhook:
+        description: Whether SLACK_WEBHOOK_URL secret is set
+        required: false
+        default: false
+        type: boolean
+      has_smtp_notification:
+        description: Whether SMTP_* and email secrets are set
+        required: false
+        default: false
+        type: boolean
     secrets:
       APP_STORE_CONNECT_API_KEY_ID:
         required: true
@@ -149,14 +169,14 @@ jobs:
           echo "${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}" | base64 --decode > /tmp/asc_key.p8
 
       - name: Import signing certificate (optional)
-        if: ${{ secrets.SIGNING_CERT_BASE64 != '' && secrets.SIGNING_CERT_PASSWORD != '' }}
+        if: ${{ inputs.has_signing_cert }}
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.SIGNING_CERT_BASE64 }}
           p12-password: ${{ secrets.SIGNING_CERT_PASSWORD }}
 
       - name: Install provisioning profile (optional)
-        if: ${{ secrets.PROVISIONING_PROFILE_BASE64 != '' }}
+        if: ${{ inputs.has_provisioning_profile }}
         shell: bash
         run: |
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
@@ -253,7 +273,7 @@ jobs:
             ${{ runner.temp }}/appstore-upload.log
 
       - name: Notify Slack on failure
-        if: ${{ failure() && secrets.SLACK_WEBHOOK_URL != '' }}
+        if: ${{ failure() && inputs.has_slack_webhook }}
         shell: bash
         run: |
           payload=$(cat <<EOF
@@ -263,7 +283,7 @@ jobs:
           curl -X POST -H 'Content-type: application/json' --data "$payload" "${{ secrets.SLACK_WEBHOOK_URL }}"
 
       - name: Notify email on failure
-        if: ${{ failure() && secrets.SMTP_SERVER != '' && secrets.SMTP_USERNAME != '' && secrets.SMTP_PASSWORD != '' && secrets.FAILURE_EMAIL_FROM != '' && secrets.FAILURE_EMAIL_TO != '' }}
+        if: ${{ failure() && inputs.has_smtp_notification }}
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: ${{ secrets.SMTP_SERVER }}

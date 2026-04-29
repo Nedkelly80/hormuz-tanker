@@ -34,6 +34,10 @@ jobs:
       allowed_tag_prefix: refs/tags/v
       allowed_tag_prefix_alt: refs/tags/release-
       artifact_retention_days: 14
+      has_signing_cert: false
+      has_provisioning_profile: false
+      has_slack_webhook: false
+      has_smtp_notification: false
     secrets:
       APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
