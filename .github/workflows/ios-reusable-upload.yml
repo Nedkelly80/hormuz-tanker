@@ -166,7 +166,8 @@ jobs:
 
       - name: Decode App Store Connect API key
         run: |
-          echo "${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}" | base64 --decode > /tmp/asc_key.p8
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8
 
       - name: Import signing certificate (optional)
         if: ${{ inputs.has_signing_cert }}
