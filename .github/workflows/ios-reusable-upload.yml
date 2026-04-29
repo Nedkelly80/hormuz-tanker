@@ -149,14 +149,14 @@ jobs:
           echo "${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}" | base64 --decode > /tmp/asc_key.p8
 
       - name: Import signing certificate (optional)
-        if: ${{ secrets.SIGNING_CERT_BASE64 != '' && secrets.SIGNING_CERT_PASSWORD != '' }}
+        if: secrets.SIGNING_CERT_BASE64 != '' && secrets.SIGNING_CERT_PASSWORD != ''
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.SIGNING_CERT_BASE64 }}
           p12-password: ${{ secrets.SIGNING_CERT_PASSWORD }}
 
       - name: Install provisioning profile (optional)
-        if: ${{ secrets.PROVISIONING_PROFILE_BASE64 != '' }}
+        if: secrets.PROVISIONING_PROFILE_BASE64 != ''
         shell: bash
         run: |
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
@@ -231,12 +231,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          xcrun iTMSTransporter \
-            -m upload \
-            -assetFile "${IPA_PATH}" \
-            -apiKey "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
-            -apiIssuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
-            -v informational \
+          xcrun altool --upload-app \
+            --type ios \
+            --file "${IPA_PATH}" \
+            --apiKey "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
+            --apiIssuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
+            --verbose \
             | tee "$RUNNER_TEMP/appstore-upload.log"
 
       - name: Upload IPA and logs as artifacts
