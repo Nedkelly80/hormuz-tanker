@@ -220,13 +220,20 @@ jobs:
             -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
             | tee "$RUNNER_TEMP/xcode-export.log"
 
+          IPA_PATH="$(find "$RUNNER_TEMP/${{ inputs.app_scheme }}-IPA" -maxdepth 1 -name '*.ipa' | head -n1)"
+          if [[ -z "${IPA_PATH}" ]]; then
+            echo "No IPA found after export."
+            exit 1
+          fi
+          echo "IPA_PATH=${IPA_PATH}" >> "$GITHUB_ENV"
+
       - name: Upload to App Store Connect
         shell: bash
         run: |
           set -euo pipefail
           xcrun altool --upload-app \
             --type ios \
-            --file "$RUNNER_TEMP/${{ inputs.app_scheme }}-IPA/App.ipa" \
+            --file "${IPA_PATH}" \
             --apiKey "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
             --apiIssuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
             --verbose \
@@ -240,7 +247,7 @@ jobs:
           retention-days: ${{ inputs.artifact_retention_days }}
           if-no-files-found: warn
           path: |
-            ${{ runner.temp }}/${{ inputs.app_scheme }}-IPA/App.ipa
+            ${{ env.IPA_PATH }}
             ${{ runner.temp }}/xcode-archive.log
             ${{ runner.temp }}/xcode-export.log
             ${{ runner.temp }}/appstore-upload.log

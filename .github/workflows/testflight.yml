@@ -20,6 +20,8 @@ on:
 
 jobs:
   upload-ios:
+    permissions:
+      contents: read
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/release-')
     uses: ./.github/workflows/ios-reusable-upload.yml
     with:
