@@ -1,0 +1,273 @@
+name: Reusable iOS Build, Sign, and Upload
+
+on:
+  workflow_call:
+    inputs:
+      app_scheme:
+        description: Xcode scheme name
+        required: true
+        type: string
+      workspace_path:
+        description: Path to .xcworkspace (use either workspace_path or project_path)
+        required: false
+        default: ""
+        type: string
+      project_path:
+        description: Path to .xcodeproj (use either project_path or workspace_path)
+        required: false
+        default: ""
+        type: string
+      bundle_id:
+        description: App bundle identifier
+        required: true
+        type: string
+      team_id:
+        description: Apple Developer Team ID
+        required: true
+        type: string
+      release_channel:
+        description: Upload channel
+        required: false
+        default: testflight
+        type: string
+      allowed_branch:
+        description: Fully-qualified branch ref allowed for uploads
+        required: false
+        default: refs/heads/main
+        type: string
+      allowed_tag_prefix:
+        description: Fully-qualified tag prefix allowed for uploads
+        required: false
+        default: refs/tags/v
+        type: string
+      allowed_tag_prefix_alt:
+        description: Optional second fully-qualified tag prefix allowed for uploads
+        required: false
+        default: ""
+        type: string
+      artifact_retention_days:
+        description: Artifact retention in days
+        required: false
+        default: 14
+        type: number
+    secrets:
+      APP_STORE_CONNECT_API_KEY_ID:
+        required: true
+      APP_STORE_CONNECT_ISSUER_ID:
+        required: true
+      APP_STORE_CONNECT_API_KEY_BASE64:
+        required: true
+      SIGNING_CERT_BASE64:
+        required: false
+      SIGNING_CERT_PASSWORD:
+        required: false
+      PROVISIONING_PROFILE_BASE64:
+        required: false
+      SLACK_WEBHOOK_URL:
+        required: false
+      SMTP_SERVER:
+        required: false
+      SMTP_PORT:
+        required: false
+      SMTP_USERNAME:
+        required: false
+      SMTP_PASSWORD:
+        required: false
+      FAILURE_EMAIL_FROM:
+        required: false
+      FAILURE_EMAIL_TO:
+        required: false
+
+jobs:
+  build-sign-upload:
+    name: Build iOS and Upload to App Store Connect
+    runs-on: macos-15
+    environment:
+      name: ${{ inputs.release_channel == 'production' && 'production' || 'testflight' }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Validate upload scope and refs
+        shell: bash
+        run: |
+          set -euo pipefail
+          ALLOWED_BRANCH="${{ inputs.allowed_branch }}"
+          ALLOWED_TAG_PREFIX="${{ inputs.allowed_tag_prefix }}"
+          ALLOWED_TAG_PREFIX_ALT="${{ inputs.allowed_tag_prefix_alt }}"
+
+          if [[ -z "${{ inputs.workspace_path }}" && -z "${{ inputs.project_path }}" ]]; then
+            echo "Either workspace_path or project_path must be provided."
+            exit 1
+          fi
+
+          if [[ -n "${{ inputs.workspace_path }}" && -n "${{ inputs.project_path }}" ]]; then
+            echo "Provide only one of workspace_path or project_path."
+            exit 1
+          fi
+
+          if [[ "${GITHUB_REF}" == "${ALLOWED_BRANCH}" || "${GITHUB_REF}" == ${ALLOWED_TAG_PREFIX}* || ( -n "${ALLOWED_TAG_PREFIX_ALT}" && "${GITHUB_REF}" == ${ALLOWED_TAG_PREFIX_ALT}* ) ]]; then
+            echo "Ref ${GITHUB_REF} is approved for upload."
+          else
+            echo "Ref ${GITHUB_REF} is not approved. Allowed branch: ${ALLOWED_BRANCH}; tag prefixes: ${ALLOWED_TAG_PREFIX} ${ALLOWED_TAG_PREFIX_ALT}"
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Sync Capacitor iOS
+        run: npx cap copy ios
+
+      - name: Install CocoaPods
+        run: |
+          gem install cocoapods --no-document
+          cd ios/App && pod install
+
+      - name: Set unique build number
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUILD_NUMBER="$(date -u +%Y%m%d)${GITHUB_RUN_NUMBER}${GITHUB_RUN_ATTEMPT}"
+          sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*/CURRENT_PROJECT_VERSION = ${BUILD_NUMBER}/g" ios/App/App.xcodeproj/project.pbxproj
+          echo "BUILD_NUMBER=${BUILD_NUMBER}" >> "$GITHUB_ENV"
+
+      - name: Decode App Store Connect API key
+        run: |
+          echo "${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}" | base64 --decode > /tmp/asc_key.p8
+
+      - name: Import signing certificate (optional)
+        if: ${{ secrets.SIGNING_CERT_BASE64 != '' && secrets.SIGNING_CERT_PASSWORD != '' }}
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.SIGNING_CERT_BASE64 }}
+          p12-password: ${{ secrets.SIGNING_CERT_PASSWORD }}
+
+      - name: Install provisioning profile (optional)
+        if: ${{ secrets.PROVISIONING_PROFILE_BASE64 != '' }}
+        shell: bash
+        run: |
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          echo "${{ secrets.PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/profile.mobileprovision"
+
+      - name: Archive (Xcode)
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET_ARG=""
+          if [[ -n "${{ inputs.workspace_path }}" ]]; then
+            TARGET_ARG="-workspace ${{ inputs.workspace_path }}"
+          else
+            TARGET_ARG="-project ${{ inputs.project_path }}"
+          fi
+
+          xcodebuild archive \
+            ${TARGET_ARG} \
+            -scheme "${{ inputs.app_scheme }}" \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/${{ inputs.app_scheme }}.xcarchive" \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM="${{ inputs.team_id }}" \
+            PRODUCT_BUNDLE_IDENTIFIER="${{ inputs.bundle_id }}" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath /tmp/asc_key.p8 \
+            -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
+            | tee "$RUNNER_TEMP/xcode-archive.log"
+
+      - name: Export IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store</string>
+            <key>teamID</key>
+            <string>${{ inputs.team_id }}</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>uploadBitcode</key>
+            <false/>
+            <key>uploadSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/${{ inputs.app_scheme }}.xcarchive" \
+            -exportPath "$RUNNER_TEMP/${{ inputs.app_scheme }}-IPA" \
+            -exportOptionsPlist /tmp/ExportOptions.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath /tmp/asc_key.p8 \
+            -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
+            | tee "$RUNNER_TEMP/xcode-export.log"
+
+      - name: Upload to App Store Connect
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$RUNNER_TEMP/${{ inputs.app_scheme }}-IPA/App.ipa" \
+            --apiKey "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
+            --apiIssuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
+            --verbose \
+            | tee "$RUNNER_TEMP/appstore-upload.log"
+
+      - name: Upload IPA and logs as artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-upload-${{ github.run_id }}
+          retention-days: ${{ inputs.artifact_retention_days }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/${{ inputs.app_scheme }}-IPA/App.ipa
+            ${{ runner.temp }}/xcode-archive.log
+            ${{ runner.temp }}/xcode-export.log
+            ${{ runner.temp }}/appstore-upload.log
+
+      - name: Notify Slack on failure
+        if: failure() && secrets.SLACK_WEBHOOK_URL != ''
+        shell: bash
+        run: |
+          payload=$(cat <<EOF
+          {"text":"❌ iOS upload failed for ${GITHUB_REPOSITORY} (${GITHUB_REF_NAME}) in run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"}
+          EOF
+          )
+          curl -X POST -H 'Content-type: application/json' --data "$payload" "${{ secrets.SLACK_WEBHOOK_URL }}"
+
+      - name: Notify email on failure
+        if: failure() && secrets.SMTP_SERVER != '' && secrets.SMTP_USERNAME != '' && secrets.SMTP_PASSWORD != '' && secrets.FAILURE_EMAIL_FROM != '' && secrets.FAILURE_EMAIL_TO != ''
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT || 587 }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "[CI Failure] iOS upload failed - ${{ github.repository }}"
+          to: ${{ secrets.FAILURE_EMAIL_TO }}
+          from: ${{ secrets.FAILURE_EMAIL_FROM }}
+          body: |
+            iOS upload failed.
+            Repository: ${{ github.repository }}
+            Ref: ${{ github.ref }}
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
