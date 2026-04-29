@@ -234,6 +234,10 @@ jobs:
             -archivePath "$RUNNER_TEMP/${{ inputs.app_scheme }}.xcarchive" \
             -exportPath "$RUNNER_TEMP/${{ inputs.app_scheme }}-IPA" \
             -exportOptionsPlist /tmp/ExportOptions.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath /tmp/asc_key.p8 \
+            -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
             | tee "$RUNNER_TEMP/xcode-export.log"
 
           IPA_PATH="$(find "$RUNNER_TEMP/${{ inputs.app_scheme }}-IPA" -maxdepth 1 -name '*.ipa' | head -n1)"
