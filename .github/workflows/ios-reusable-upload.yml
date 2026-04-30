@@ -101,7 +101,7 @@ on:
 jobs:
   build-sign-upload:
     name: Build iOS and Upload to App Store Connect
-    runs-on: macos-15
+    runs-on: macos-latest
     environment:
       name: ${{ inputs.release_channel == 'production' && 'production' || 'testflight' }}
     permissions:
