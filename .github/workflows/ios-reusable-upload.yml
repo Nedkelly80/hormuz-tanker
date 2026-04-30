@@ -101,7 +101,7 @@ on:
 jobs:
   build-sign-upload:
     name: Build iOS and Upload to App Store Connect
-    runs-on: macos-latest
+    runs-on: macos-26
     environment:
       name: ${{ inputs.release_channel == 'production' && 'production' || 'testflight' }}
     permissions:
@@ -210,7 +210,6 @@ jobs:
             CODE_SIGN_IDENTITY="iPhone Distribution" \
             PROVISIONING_PROFILE_SPECIFIER="hormuzpass-appstore-ci" \
             DEVELOPMENT_TEAM="${{ inputs.team_id }}" \
-            PRODUCT_BUNDLE_IDENTIFIER="${{ inputs.bundle_id }}" \
             | tee "$RUNNER_TEMP/xcode-archive.log"
 
       - name: Package IPA from archive
