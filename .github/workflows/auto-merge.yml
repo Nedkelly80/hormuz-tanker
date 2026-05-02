@@ -1,0 +1,145 @@
+name: Auto Merge PR
+
+on:
+  pull_request_review:
+    types:
+      - submitted
+  check_suite:
+    types:
+      - completed
+  workflow_run:
+    workflows:
+      - PR CI
+    types:
+      - completed
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-and-merge:
+    name: Enable auto-merge (squash)
+    runs-on: ubuntu-latest
+
+    # Only act when PR CI succeeded.
+    if: |
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success') ||
+      (github.event_name == 'pull_request_review' && github.event.review.state == 'approved')
+
+    steps:
+      - name: Find PR
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const event = context.eventName;
+            let prs = [];
+
+            if (event === 'workflow_run') {
+              const run = context.payload.workflow_run;
+              const { data } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                head: `${context.repo.owner}:${run.head_branch}`,
+                base: 'main',
+                per_page: 10,
+              });
+              prs = data;
+            } else if (event === 'check_suite') {
+              const sha = context.payload.check_suite.head_sha;
+              const { data } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: sha,
+                per_page: 10,
+              });
+              prs = data.filter(pr => pr.state === 'open' && pr.base.ref === 'main');
+            } else if (event === 'pull_request_review') {
+              prs = [context.payload.pull_request];
+            }
+
+            if (!prs.length) {
+              core.setOutput('number', '');
+              return;
+            }
+
+            // Prefer PRs explicitly labeled for auto-merge.
+            const labeled = prs.find(pr => (pr.labels || []).some(l => l.name === 'automerge')) || prs[0];
+            core.setOutput('number', String(labeled.number));
+            core.setOutput('headSha', labeled.head && labeled.head.sha ? labeled.head.sha : '');
+
+      - name: Stop if no PR
+        if: steps.pr.outputs.number == ''
+        run: echo "No matching PR found; skipping."
+
+      - name: Ensure PR is safe to auto-merge
+        if: steps.pr.outputs.number != ''
+        id: guard
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = Number('${{ steps.pr.outputs.number }}');
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+
+            if (pr.base.ref !== 'main') {
+              core.setFailed(`Refusing to auto-merge into ${pr.base.ref}; only main is allowed.`);
+              return;
+            }
+
+            // Require explicit label to avoid merging arbitrary contributor PRs.
+            const hasLabel = (pr.labels || []).some(l => l.name === 'automerge');
+            if (!hasLabel) {
+              core.setFailed('Missing required label: automerge');
+              return;
+            }
+
+            if (!pr.mergeable) {
+              core.setFailed('PR is not mergeable (conflicts or unknown state).');
+              return;
+            }
+
+            if (pr.draft) {
+              core.setFailed('PR is draft.');
+              return;
+            }
+
+            if (pr.state !== 'open') {
+              core.setFailed('PR is not open.');
+              return;
+            }
+
+            core.setOutput('ok', 'true');
+
+      - name: Enable auto-merge
+        if: steps.pr.outputs.number != '' && steps.guard.outputs.ok == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = Number('${{ steps.pr.outputs.number }}');
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+
+            if (pr.auto_merge) {
+              core.info('Auto-merge already enabled.');
+              return;
+            }
+
+            // Use GraphQL since REST doesn't support enabling auto-merge.
+            const mutation = `mutation($pullRequestId: ID!) {
+              enablePullRequestAutoMerge(input: { pullRequestId: $pullRequestId, mergeMethod: SQUASH }) {
+                pullRequest { number }
+              }
+            }`;
+            await github.graphql(mutation, { pullRequestId: pr.node_id });
+            core.info(`Enabled auto-merge for #${prNumber}.`);
+
