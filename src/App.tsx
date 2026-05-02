@@ -101,6 +101,8 @@ const CARGO_STATS = {
 // Types
 type GameStatus = "start" | "playing" | "levy" | "gameOver";
 
+type SoundSetting = "on" | "off";
+
 interface GameObject {
   id: number;
   x: number;
@@ -108,6 +110,7 @@ interface GameObject {
   width: number;
   height: number;
   type: "mine" | "levy" | "bonus" | "boost" | "fuel" | "shield";
+  variant?: number;
   speed: number;
   vx: number;
 }
@@ -135,6 +138,11 @@ const MISSION_TOAST_DURATION_MS = 4000;
 
 export default function App() {
   const [status, setStatus] = useState<GameStatus>("start");
+  const [paused, setPaused] = useState(false);
+  const [soundSetting, setSoundSetting] = useState<SoundSetting>(() => {
+    const saved = localStorage.getItem('ocean-cargo-sound');
+    return saved === 'off' ? 'off' : 'on';
+  });
   const [score, setScore] = useState(0);
   const [cash, setCash] = useState(INITIAL_CASH);
   const [health, setHealth] = useState(INITIAL_HEALTH);
@@ -156,6 +164,7 @@ export default function App() {
   const [cargoType, setCargoType] = useState<CargoType>("crude");
   const [graphicsMode, setGraphicsMode] = useState<"standard" | "enhanced">("enhanced");
   const [showMenuExitConfirm, setShowMenuExitConfirm] = useState(false);
+  const [showInGameMenu, setShowInGameMenu] = useState(false);
 
   // ── Fuel & Shield ────────────────────────────────────────────────────
   const INITIAL_FUEL = 100;
@@ -423,6 +432,7 @@ export default function App() {
   }, [unlockAudio]);
 
   const playSound = (type: "seagull" | "foghorn" | "explosion") => {
+    if (soundSetting === "off") return;
     let s: HTMLAudioElement | null = null;
     if (type === "seagull") s = seagullSound.current;
     if (type === "foghorn") s = foghornSound.current;
@@ -555,7 +565,7 @@ export default function App() {
   }, [boostActive]);
 
   useEffect(() => {
-    if (status !== "playing") {
+    if (status !== "playing" || paused || soundSetting === "off") {
       if (rainSound.current) rainSound.current.pause();
       if (ambientOceanSound.current) ambientOceanSound.current.pause();
       if (engineSound.current) engineSound.current.pause();
@@ -585,7 +595,7 @@ export default function App() {
     }, 15000);
 
     return () => clearInterval(interval);
-  }, [status, unlockAudio]);
+  }, [status, paused, soundSetting, unlockAudio]);
 
   useEffect(() => {
     if (weather === "fog") {
@@ -648,6 +658,7 @@ export default function App() {
       width: objWidth,
       height: type === "levy" ? 60 : objWidth,
       type,
+      variant: type === "mine" ? Math.floor(Math.random() * 3) : undefined,
       speed: (1.5 + Math.random() * 2) * difficultyScale,
       vx: type === "mine" ? (Math.random() > 0.5 ? 1 : -1) * (0.5 + Math.random() * 1.0 * difficultyScale) : 0,
     };
@@ -688,6 +699,9 @@ export default function App() {
     setMissionStartMetric(0);
     setTollsCompleted(0);
     setStatus("playing");
+    setPaused(false);
+    setShowInGameMenu(false);
+    setShowMenuExitConfirm(false);
     setBoostActive(false);
     boostActiveRef.current = false;
     bankSavedRef.current = false;
@@ -745,10 +759,53 @@ export default function App() {
     }
   };
 
+  const toggleSound = () => {
+    setSoundSetting(prev => {
+      const next: SoundSetting = prev === 'on' ? 'off' : 'on';
+      localStorage.setItem('ocean-cargo-sound', next);
+      return next;
+    });
+  };
+
+  const pauseGame = () => {
+    if (status !== 'playing') return;
+    setPaused(true);
+    setShowInGameMenu(true);
+  };
+
+  const resumeGame = () => {
+    if (status !== 'playing') return;
+    setPaused(false);
+    setShowInGameMenu(false);
+  };
+
+  const restartRun = () => {
+    setShowInGameMenu(false);
+    setPaused(false);
+    startGame();
+  };
+
+  const buyMoreCredits = () => {
+    setShowInGameMenu(false);
+    setShowIAP(true);
+    setIapReason('fuel');
+  };
+
+  useEffect(() => {
+    if (status !== 'playing') {
+      setPaused(false);
+      setShowInGameMenu(false);
+    }
+  }, [status]);
+
   useEffect(() => {
     if (status !== "playing") return;
 
     const gameLoop = (time: number) => {
+      if (paused) {
+        gameLoopRef.current = requestAnimationFrame(gameLoop);
+        return;
+      }
       const stats = CARGO_STATS[cargoType];
 
       // Physics recoveries
@@ -981,7 +1038,7 @@ export default function App() {
     gameLoopRef.current = requestAnimationFrame(gameLoop);
 
     return () => cancelAnimationFrame(gameLoopRef.current);
-  }, [status, spawnObject]);
+  }, [status, paused, spawnObject]);
 
   return (
     <div 
@@ -1091,6 +1148,14 @@ export default function App() {
               background: "linear-gradient(to right, #0a0a08, #111209, #151510)",
               boxShadow: "8px 0 24px rgba(0,0,0,0.9)"
             }} />
+            {/* Shoreline grass strip */}
+            <div
+              className="absolute right-0 top-0 bottom-0 w-[10px]"
+              style={{
+                background: "linear-gradient(to left, rgba(34,197,94,0.45), rgba(34,197,94,0.05), transparent)",
+                filter: "blur(0.2px)",
+              }}
+            />
             {/* Rock cliff edge — jagged SVG */}
             <svg className="absolute right-0 top-0 h-full" width="22" viewBox="0 0 22 42" preserveAspectRatio="none">
               <polygon points={`0,0 8,0 14,${rockH1} 22,${rockH2} 22,42 0,42`} fill="#1a1a14" />
@@ -1123,20 +1188,22 @@ export default function App() {
             )}
             {/* Turret (every 5th) */}
             {hasTurret && slice.leftWidth > 20 && (
-              <svg className="absolute" style={{ left: slice.leftWidth - 28, top: 0 }} width="28" height="42" viewBox="0 0 28 42">
+              <svg className="absolute" style={{ left: slice.leftWidth - 30, top: -1 }} width="30" height="44" viewBox="0 0 30 44">
                 {/* Base bunker */}
-                <rect x="2" y="22" width="24" height="18" rx="1" fill="#1e1e18" stroke="#333328" strokeWidth="1"/>
-                <rect x="4" y="20" width="20" height="6" rx="1" fill="#252520"/>
-                {/* Turret dome */}
-                <ellipse cx="14" cy="20" rx="10" ry="6" fill="#2a2a22" stroke="#3a3a30" strokeWidth="1"/>
-                {/* Gun barrel */}
-                <rect x="20" y="17" width="14" height="3" rx="1" fill="#333328" stroke="#444438" strokeWidth="0.5"/>
-                {/* Muzzle */}
-                <rect x="32" y="17.5" width="3" height="2" rx="0.5" fill="#555548"/>
+                <rect x="2" y="24" width="26" height="18" rx="2" fill="#171712" stroke="#2f2f24" strokeWidth="1"/>
+                <rect x="4" y="22" width="22" height="6" rx="2" fill="#1f1f18" />
+                {/* Turret ring */}
+                <ellipse cx="15" cy="22" rx="11" ry="6" fill="#26261e" stroke="#3a3a30" strokeWidth="1"/>
+                <ellipse cx="15" cy="22" rx="7" ry="4" fill="#1a1a14" opacity="0.75" />
+                {/* Gun barrel (with recoil sleeve) */}
+                <rect x="18" y="19" width="15" height="4" rx="2" fill="#2f2f24" stroke="#454538" strokeWidth="0.6"/>
+                <rect x="25" y="19.6" width="6" height="2.8" rx="1.4" fill="#404034" />
+                <rect x="31" y="20" width="3" height="2" rx="1" fill="#5a5a4a" />
                 {/* Viewport slit */}
-                <rect x="6" y="18" width="14" height="2" rx="1" fill="#111108"/>
+                <rect x="7" y="20" width="13" height="2" rx="1" fill="#0a0a08" opacity="0.9"/>
                 {/* Warning light */}
-                <circle cx="14" cy="14" r="2" fill="#ff3300" opacity="0.9" className="animate-pulse"/>
+                <circle cx="15" cy="15" r="2" fill="#ff3300" opacity="0.9" className="animate-pulse"/>
+                <circle cx="15" cy="15" r="4" fill="#ff3300" opacity="0.15" />
               </svg>
             )}
             {/* Watchtower (every 11th) */}
@@ -1160,6 +1227,14 @@ export default function App() {
               background: "linear-gradient(to left, #0a0a08, #111209, #151510)",
               boxShadow: "-8px 0 24px rgba(0,0,0,0.9)"
             }} />
+            {/* Shoreline grass strip */}
+            <div
+              className="absolute left-0 top-0 bottom-0 w-[10px]"
+              style={{
+                background: "linear-gradient(to right, rgba(34,197,94,0.45), rgba(34,197,94,0.05), transparent)",
+                filter: "blur(0.2px)",
+              }}
+            />
             {/* Rock cliff edge */}
             <svg className="absolute left-0 top-0 h-full" width="22" viewBox="0 0 22 42" preserveAspectRatio="none">
               <polygon points={`22,0 14,0 8,${rockH2} 0,${rockH1} 0,42 22,42`} fill="#1a1a14" />
@@ -1188,15 +1263,18 @@ export default function App() {
             )}
             {/* Turret */}
             {hasTurret && slice.rightWidth > 20 && (
-              <svg className="absolute" style={{ right: slice.rightWidth - 28, top: 0 }} width="28" height="42" viewBox="0 0 28 42">
-                <rect x="2" y="22" width="24" height="18" rx="1" fill="#1e1e18" stroke="#333328" strokeWidth="1"/>
-                <rect x="4" y="20" width="20" height="6" rx="1" fill="#252520"/>
-                <ellipse cx="14" cy="20" rx="10" ry="6" fill="#2a2a22" stroke="#3a3a30" strokeWidth="1"/>
+              <svg className="absolute" style={{ right: slice.rightWidth - 30, top: -1 }} width="30" height="44" viewBox="0 0 30 44">
+                <rect x="2" y="24" width="26" height="18" rx="2" fill="#171712" stroke="#2f2f24" strokeWidth="1"/>
+                <rect x="4" y="22" width="22" height="6" rx="2" fill="#1f1f18" />
+                <ellipse cx="15" cy="22" rx="11" ry="6" fill="#26261e" stroke="#3a3a30" strokeWidth="1"/>
+                <ellipse cx="15" cy="22" rx="7" ry="4" fill="#1a1a14" opacity="0.75" />
                 {/* Barrel pointing LEFT (into strait) */}
-                <rect x="-6" y="17" width="14" height="3" rx="1" fill="#333328" stroke="#444438" strokeWidth="0.5"/>
-                <rect x="-9" y="17.5" width="3" height="2" rx="0.5" fill="#555548"/>
-                <rect x="8" y="18" width="14" height="2" rx="1" fill="#111108"/>
-                <circle cx="14" cy="14" r="2" fill="#ff3300" opacity="0.9" className="animate-pulse"/>
+                <rect x="-3" y="19" width="15" height="4" rx="2" fill="#2f2f24" stroke="#454538" strokeWidth="0.6"/>
+                <rect x="-1" y="19.6" width="6" height="2.8" rx="1.4" fill="#404034" />
+                <rect x="-4" y="20" width="3" height="2" rx="1" fill="#5a5a4a" />
+                <rect x="10" y="20" width="13" height="2" rx="1" fill="#0a0a08" opacity="0.9"/>
+                <circle cx="15" cy="15" r="2" fill="#ff3300" opacity="0.9" className="animate-pulse"/>
+                <circle cx="15" cy="15" r="4" fill="#ff3300" opacity="0.15" />
               </svg>
             )}
             {/* Watchtower */}
@@ -1369,7 +1447,9 @@ export default function App() {
             <>
               <div className="w-px h-6 bg-white/10 shrink-0" />
               <button
-                onClick={() => setShowMenuExitConfirm(true)}
+                onClick={() => {
+                  pauseGame();
+                }}
                 className="pointer-events-auto px-2 py-1 rounded-lg bg-white/10 border border-white/15 active:scale-95 flex items-center gap-1 shrink-0"
               >
                 <Menu className="w-3 h-3 text-white" />
@@ -1675,17 +1755,22 @@ export default function App() {
                       <stop offset="100%" stopColor="#ef4444"/>
                     </radialGradient>
                   </defs>
-                  {/* Spikes */}
-                  {[0,45,90,135,180,225,270,315].map((angle,i) => {
+                  {/* Spikes (variants) */}
+                  {((obj.variant ?? 0) === 0 ? [0,45,90,135,180,225,270,315] : (obj.variant ?? 0) === 1 ? [20,70,140,200,260,320] : [0,60,120,180,240,300]).map((angle,i) => {
                     const rad = angle * Math.PI / 180;
-                    return <line key={i} x1={20 + Math.cos(rad)*14} y1={20 + Math.sin(rad)*14} x2={20 + Math.cos(rad)*20} y2={20 + Math.sin(rad)*20} stroke="#6b7280" strokeWidth="2" strokeLinecap="round"/>;
+                    const inner = (obj.variant ?? 0) === 0 ? 14 : (obj.variant ?? 0) === 1 ? 13 : 12;
+                    const outer = (obj.variant ?? 0) === 0 ? 20 : (obj.variant ?? 0) === 1 ? 21 : 18;
+                    return <line key={i} x1={20 + Math.cos(rad)*inner} y1={20 + Math.sin(rad)*inner} x2={20 + Math.cos(rad)*outer} y2={20 + Math.sin(rad)*outer} stroke="#6b7280" strokeWidth={(obj.variant ?? 0) === 2 ? 2.6 : 2} strokeLinecap="round"/>;
                   })}
                   {/* Body */}
-                  <circle cx="20" cy="20" r="13" fill="url(#mineGrad)" stroke="#1f2937" strokeWidth="1.5"/>
+                  <circle cx="20" cy="20" r={(obj.variant ?? 0) === 2 ? 12 : 13} fill="url(#mineGrad)" stroke="#1f2937" strokeWidth="1.5"/>
                   {/* Sheen */}
-                  <ellipse cx="15" cy="14" rx="5" ry="4" fill="white" fillOpacity="0.08"/>
+                  <ellipse cx={((obj.variant ?? 0) === 1 ? 16 : 15)} cy={((obj.variant ?? 0) === 1 ? 13 : 14)} rx={((obj.variant ?? 0) === 2 ? 6 : 5)} ry={((obj.variant ?? 0) === 2 ? 3 : 4)} fill="white" fillOpacity="0.08"/>
                   {/* Core blinker */}
                   <circle cx="20" cy="20" r="3" fill="url(#mineCore)" style={{filter:'drop-shadow(0 0 4px #ef4444)'}}/>
+                  {(obj.variant ?? 0) === 1 && (
+                    <circle cx="20" cy="20" r="7" fill="none" stroke="#ef4444" strokeOpacity="0.25" strokeWidth="1" />
+                  )}
                 </svg>
               </div>
             ) : obj.type === "levy" ? (
@@ -1832,6 +1917,77 @@ export default function App() {
 
       {/* ── IAP Modal ─────────────────────────────────────────────────── */}
       <AnimatePresence>
+        {showInGameMenu && status === "playing" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-[190] bg-black/75 backdrop-blur-xl flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 16 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 16 }}
+              className="ios-card w-full max-w-sm p-5"
+            >
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <div className="text-[10px] uppercase tracking-[0.25em] text-white/40 font-black">Paused</div>
+                  <div className="text-xl font-black text-white leading-tight">Captain Menu</div>
+                </div>
+                <button
+                  onClick={resumeGame}
+                  className="pointer-events-auto w-10 h-10 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center active:scale-95"
+                  aria-label="Close menu"
+                >
+                  <X className="w-5 h-5 text-white" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={resumeGame}
+                  className="pointer-events-auto py-3 rounded-xl bg-ios-blue text-sm font-black text-white active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <Play className="w-4 h-4" />
+                  Resume
+                </button>
+                <button
+                  onClick={toggleSound}
+                  className="pointer-events-auto py-3 rounded-xl bg-white/10 border border-white/15 text-sm font-black text-white active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <Settings className="w-4 h-4" />
+                  Sound: {soundSetting === 'on' ? 'On' : 'Off'}
+                </button>
+                <button
+                  onClick={buyMoreCredits}
+                  className="pointer-events-auto py-3 rounded-xl bg-amber-500/20 border border-amber-400/30 text-sm font-black text-amber-200 active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <Banknote className="w-4 h-4" />
+                  Buy Credits
+                </button>
+                <button
+                  onClick={restartRun}
+                  className="pointer-events-auto py-3 rounded-xl bg-white/10 border border-white/15 text-sm font-black text-white active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Restart
+                </button>
+                <button
+                  onClick={() => {
+                    setShowInGameMenu(false);
+                    setShowMenuExitConfirm(true);
+                  }}
+                  className="pointer-events-auto col-span-2 py-3 rounded-xl bg-white/5 border border-white/10 text-sm font-black text-white/80 active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Quit to Main Menu
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         {showMenuExitConfirm && status === "playing" && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -1974,15 +2130,19 @@ export default function App() {
             className="absolute inset-0 z-[100] bg-black/70 backdrop-blur-xl flex items-center justify-center p-8 text-center"
           >
             <div className="ios-card p-10 max-w-sm w-full shadow-2xl border border-white/10">
-              <div className="bg-ios-blue/20 w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-6">
-                <Anchor className="w-8 h-8 text-ios-blue" />
+              <div className="relative mb-6">
+                <div className="absolute inset-0 blur-3xl opacity-60" style={{ background: "radial-gradient(circle at 50% 40%, rgba(10,132,255,0.35), transparent 70%)" }} />
+                <div className="bg-ios-blue/20 w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-3 border border-white/10">
+                  <Anchor className="w-8 h-8 text-ios-blue" />
+                </div>
+                <h1 className="text-4xl font-black text-white leading-none tracking-tight">Hormuz Pass</h1>
+                <div className="text-[10px] uppercase tracking-[0.35em] text-white/40 font-black mt-2">Navigate • Survive • Profit</div>
               </div>
-              <h1 className="text-3xl font-black text-white mb-2 leading-none">Hormuz Pass</h1>
-              <p className="text-white/50 text-xs mb-6 leading-relaxed font-medium">
-                Command a Deep-Sea Tanker through the world's most dangerous energy bottleneck. Avoid the literal rocky shores and hostile mines.
+              <p className="text-white/55 text-xs mb-6 leading-relaxed font-medium">
+                Pilot a deep-sea tanker through narrow shores and hostile mines. Complete missions, build your bank, and push further each run.
               </p>
               
-              <div className="flex gap-2 mb-8 justify-center overflow-x-auto pb-2 px-2 mask-edges">
+              <div className="flex gap-2 mb-6 justify-center overflow-x-auto pb-2 px-2 mask-edges">
                 {(["crude", "lng", "chemicals"] as CargoType[]).map((type) => (
                   <button
                     key={type}
@@ -1992,6 +2152,16 @@ export default function App() {
                     <span className="text-[10px] font-bold uppercase whitespace-nowrap">{CARGO_STATS[type].name}</span>
                   </button>
                 ))}
+              </div>
+
+              <div className="ios-glass rounded-2xl border border-white/5 px-4 py-3 mb-6 text-left">
+                <div className="flex items-center justify-between">
+                  <div className="text-[10px] uppercase tracking-[0.25em] text-white/35 font-black">Bank</div>
+                  <div className="text-sm font-black text-white">${bankBalance.toLocaleString()}</div>
+                </div>
+                <div className="mt-2 text-[11px] text-white/55">
+                  Tip: pausing opens the in-game menu (resume, sound, restart, quit).
+                </div>
               </div>
 
               <div className="flex items-center gap-2 mb-6">
